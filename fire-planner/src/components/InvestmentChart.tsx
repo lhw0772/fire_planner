@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import { InvestmentScenario } from '../types';
 import {
@@ -28,17 +28,60 @@ interface InvestmentChartProps {
   scenarios: InvestmentScenario[];
   currentAge: number;
   retirementOffsetYear: number | null;
-  onRetirementOffsetChange: (year: number | null) => void;
 }
 
 const InvestmentChart: React.FC<InvestmentChartProps> = ({
   scenarios,
   currentAge,
-  retirementOffsetYear,
-  onRetirementOffsetChange
+  retirementOffsetYear
 }) => {
   const chartRef = useRef<ChartJS<"line">>(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
+  // 금액을 적절한 단위로 변환하는 함수
+  const formatAmount = (amount: number): string => {
+    const amountInManwon = amount / 10000; // 원 단위를 만원 단위로 변환
+    
+    if (amountInManwon >= 10000) { // 1억 이상
+      const billions = Math.floor(amountInManwon / 10000);
+      const remainder = amountInManwon % 10000;
+      if (remainder === 0) {
+        return `${billions}억원`;
+      }
+      return `${billions}억 ${remainder.toLocaleString()}만원`;
+    } else if (amountInManwon >= 1000) { // 1천만원 이상
+      const thousands = Math.floor(amountInManwon / 1000);
+      const remainder = amountInManwon % 1000;
+      if (remainder === 0) {
+        return `${thousands}천만원`;
+      }
+      return `${thousands}천 ${remainder.toLocaleString()}만원`;
+    } else {
+      return `${Math.round(amountInManwon).toLocaleString()}만원`;
+    }
+  };
+
+  // 파산 시점을 찾는 함수
+  const findBankruptcyAge = (): number | null => {
+    for (let i = 0; i < scenarios.length; i++) {
+      if (scenarios[i].assets < 0) {
+        return currentAge + Math.floor(i / 12);
+      }
+    }
+    return null;
+  };
+
+  const bankruptcyAge = findBankruptcyAge();
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   console.log('InvestmentChart - received scenarios (first 5 expenses):', scenarios.slice(0, 5).map(s => s.monthlyExpenses));
 
   const annualExpensesData = scenarios.map(s => s.monthlyExpenses * 12);
@@ -76,6 +119,7 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
 
   const options: ChartOptions<"line"> = {
     responsive: true,
+    maintainAspectRatio: false,
     interaction: {
       mode: 'index' as const,
       intersect: false,
@@ -83,9 +127,15 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
     plugins: {
       title: {
         display: true,
-        text: 'FIRE 시뮬레이션'
+        text: 'FIRE 시뮬레이션',
+        font: {
+          size: isMobile ? 16 : 20
+        }
       },
       tooltip: {
+        enabled: true,
+        mode: 'index',
+        intersect: false,
         callbacks: {
           label: function(context) {
             let label = context.dataset.label || '';
@@ -99,6 +149,16 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
             return label;
           }
         }
+      },
+      legend: {
+        position: isMobile ? 'bottom' : 'top',
+        labels: {
+          boxWidth: isMobile ? 12 : 40,
+          padding: isMobile ? 10 : 20,
+          font: {
+            size: isMobile ? 12 : 14
+          }
+        }
       }
     },
     scales: {
@@ -108,14 +168,23 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
         position: 'left' as const,
         title: {
           display: true,
-          text: '예상 자산 (만원)'
+          text: '예상 자산 (만원)',
+          font: {
+            size: isMobile ? 12 : 14
+          }
         },
         beginAtZero: true,
         ticks: {
           callback: function(value, index, ticks) {
             const valueInManwon = (value as number / 10000);
             return `${valueInManwon.toLocaleString(undefined, { maximumFractionDigits: 0 })}만`;
-          }
+          },
+          font: {
+            size: isMobile ? 10 : 12
+          },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: isMobile ? 5 : 8
         }
       },
       y1: {
@@ -124,7 +193,10 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
         position: 'right' as const,
         title: {
           display: true,
-          text: '연 수입/지출 (만원)'
+          text: '연 수입/지출 (만원)',
+          font: {
+            size: isMobile ? 12 : 14
+          }
         },
         grid: {
           drawOnChartArea: false,
@@ -133,52 +205,71 @@ const InvestmentChart: React.FC<InvestmentChartProps> = ({
         ticks: {
           callback: function(value) {
             return `${(value as number / 10000).toLocaleString(undefined, { maximumFractionDigits: 0 })}만`;
-          }
+          },
+          font: {
+            size: isMobile ? 10 : 12
+          },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: isMobile ? 5 : 8
+        }
+      },
+      x: {
+        ticks: {
+          font: {
+            size: isMobile ? 10 : 12
+          },
+          maxRotation: 0,
+          autoSkip: true,
+          maxTicksLimit: isMobile ? 6 : 12
         }
       }
     }
   };
 
-  useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart) return;
-
-    const handleClick = (event: MouseEvent) => {
-      const elements = chart.getElementsAtEventForMode(
-        event,
-        'nearest',
-        { intersect: true },
-        false
-      );
-
-      if (elements.length > 0) {
-        const element = elements[0];
-        const offsetYear = Math.floor(element.index / 12);
-        onRetirementOffsetChange(offsetYear);
-      }
-    };
-
-    const canvas = chart.canvas;
-    canvas.addEventListener('click', handleClick);
-    return () => {
-      canvas.removeEventListener('click', handleClick);
-    };
-  }, [onRetirementOffsetChange]);
-
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <Line ref={chartRef} data={data} options={options} />
-      {retirementOffsetYear !== null && (
-        <div className="mt-4 text-center">
-          <p className="text-sm text-gray-600">
-            선택된 은퇴 나이: {currentAge + retirementOffsetYear}세
-          </p>
-          <button
-            className="mt-2 px-4 py-2 bg-gray-200 rounded hover:bg-gray-300"
-            onClick={() => onRetirementOffsetChange(null)}
-          >
-            선택 해제
-          </button>
+    <div className="bg-white rounded-lg shadow p-4 md:p-6">
+      {scenarios && scenarios.length > 0 ? (
+        <>
+          <div className="mb-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-800">자산 시뮬레이션 결과</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-yellow-100 rounded-lg p-4 shadow-sm border border-yellow-200">
+                <p className="text-base mb-2 h-8" style={{ fontWeight: 800, color: '#1a202c' }}>현재 자산</p>
+                <p className="text-2xl" style={{ color: '#dc2626' }}>
+                  {formatAmount(scenarios[0].assets)}
+                </p>
+              </div>
+
+              {retirementOffsetYear !== null && (
+                <div className="bg-yellow-100 rounded-lg p-4 shadow-sm border border-yellow-200">
+                  <p className="text-base mb-2 h-8" style={{ fontWeight: 800, color: '#1a202c' }}>
+                    {currentAge + retirementOffsetYear}세 은퇴 시점 자산
+                  </p>
+                  <p className="text-2xl" style={{ color: '#dc2626' }}>
+                    {formatAmount(scenarios[retirementOffsetYear * 12].assets)}
+                  </p>
+                </div>
+              )}
+
+              <div className="bg-yellow-100 rounded-lg p-4 shadow-sm border border-yellow-200">
+                <p className="text-base mb-2 h-8" style={{ fontWeight: 800, color: '#1a202c' }}>
+                  {bankruptcyAge ? `${bankruptcyAge}세 파산` : '100세 시점 자산'}
+                </p>
+                <p className="text-2xl" style={{ color: '#dc2626' }}>
+                  {bankruptcyAge ? '0원' : formatAmount(scenarios[scenarios.length - 1].assets)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ height: isMobile ? '300px' : '500px' }}>
+            <Line ref={chartRef} data={data} options={options} />
+          </div>
+        </>
+      ) : (
+        <div className="text-center py-8">
+          <p className="text-gray-500">재정 정보를 입력하면 시뮬레이션 결과가 표시됩니다.</p>
         </div>
       )}
     </div>

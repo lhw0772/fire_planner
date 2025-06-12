@@ -161,21 +161,21 @@ export function calculateInvestmentScenarios(
       monthlyIncomeAfterRetirement = 0;
     }
     
-    // 자녀 양육비 계산 (인플레이션 적용)
-    let childCost = 0;
-    if (childRearingCost) {
-      const baseChildCost = calculateChildRearingCost(
-        currentYear + year,
-        childRearingCost.childBirthYear,
-        currentAge
-      );
-      // 인플레이션 적용 (연 단위로 적용)
-      childCost = baseChildCost * Math.pow(1 + inflationRate / 100, year);
-    }
+    // 자녀 양육비 계산 주석 처리
+    // let childCost = 0;
+    // if (childRearingCost) {
+    //   const baseChildCost = calculateChildRearingCost(
+    //     currentYear + year,
+    //     childRearingCost.childBirthYear,
+    //     currentAge
+    //   );
+    //   // 인플레이션 적용 (연 단위로 적용)
+    //   childCost = baseChildCost * Math.pow(1 + inflationRate / 100, year);
+    // }
 
     // 월별 자산 업데이트
     currentAssets = currentAssets * (1 + monthlyReturnRate) + 
-                   (monthlyIncomeAfterRetirement - currentMonthlyExpenses - childCost);
+                   (monthlyIncomeAfterRetirement - currentMonthlyExpenses /* - childCost */);
 
     // 연말에만 수입 증가와 인플레이션 적용
     if (month === 11) {
@@ -198,7 +198,7 @@ export function calculateInvestmentScenarios(
       month: i,
       assets: currentAssets,
       monthlyIncome: monthlyIncomeAfterRetirement,
-      monthlyExpenses: currentMonthlyExpenses + childCost
+      monthlyExpenses: currentMonthlyExpenses /* + childCost */
     });
   }
 
